@@ -1,5 +1,5 @@
 This is a simple patch to AFL to make other-arch (non-x86 based) support easy. Just
-run ./build.sh <arch> to get started, where <arch> can be one of:
+run `./build.sh <arch>` to get started, where `<arch>` can be one of:
 
 ```
    aarch64 alpha arm armeb cris i386 m68k microblaze microblazeel 
