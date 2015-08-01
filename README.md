@@ -8,18 +8,19 @@ run `./build.sh <arch>` to get started, where `<arch>` can be one of:
    x86_64
 ```
 
-This will compile AFL with qemu support for the architecture requested. 
+This will compile AFL with qemu support for the architecture requested.
 
-Once building is completed, you'll need to set some environment variable before you can
+Once building is completed, you'll need to set some environment variables before you can
 begin fuzzing.
 
-Set `QEMU_LD_PREFIX` to a path containing the directory `lib` which itself
-contains the libraries shared objects required by the binary
+Set `QEMU_LD_PREFIX` to a path containing a directory `lib` which itself
+contains the shared objects required by the binary (such as libc compiled for `<arch>`)
+
 ```
-export QEMU_LD_PREFIX=.
+export QEMU_LD_PREFIX=. # assuming your CWD contains the 'lib' directory
 ```
 
-Set `AFL_PATH` to the directory containing the afl installation, in this case it with
+Set `AFL_PATH` to the directory containing the afl installation, in this case it will
 be the directory which you cloned this repo into
 ```
 export AFL_PATH=afl-other-arch/
