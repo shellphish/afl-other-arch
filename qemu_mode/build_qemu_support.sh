@@ -154,11 +154,9 @@ for CPU_TARGET in $CPU_TARGETS; do
 
     cp -f "${CPU_TARGET}-linux-user/qemu-${CPU_TARGET}" "../../afl-qemu-trace" || exit 1
 
-    TARGET_SUBDIR="unix-${CPU_TARGET}"
+    mkdir -p ../../tracers/$CPU_TARGET
 
-    mkdir -p ../../tracers/$TARGET_SUBDIR
-
-    cp -f "${CPU_TARGET}-linux-user/qemu-${CPU_TARGET}" "../../tracers/${TARGET_SUBDIR}/afl-qemu-trace" || exit 1
+    cp -f "${CPU_TARGET}-linux-user/qemu-${CPU_TARGET}" "../../tracers/${CPU_TARGET}/afl-qemu-trace" || exit 1
 done
 
 cd ..
