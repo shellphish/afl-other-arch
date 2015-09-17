@@ -27,8 +27,6 @@ if [ $# -lt 1 ]; then
     exit 1
 fi
 
-echo "GOT " $@
-
 QEMU_URL="http://wiki.qemu-project.org/download/qemu-2.3.0.tar.bz2"
 QEMU_SHA384="7a0f0c900f7e2048463cc32ff3e904965ab466c8428847400a0f2dcfe458108a68012c4fddb2a7e7c822b4fd1a49639b"
 
