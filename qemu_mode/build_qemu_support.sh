@@ -22,10 +22,12 @@
 # will be written to ../afl-qemu-trace.
 #
 
-if [ $# != 1 ]; then
-    echo "usage: $0 <arch>" >&2
+if [ $# -lt 1 ]; then
+    echo "usage: $0 <arches>" >&2
     exit 1
 fi
+
+echo "GOT " $@
 
 VERSION="2.10.0"
 QEMU_URL="http://download.qemu-project.org/qemu-${VERSION}.tar.xz"
@@ -121,10 +123,6 @@ tar xf "$ARCHIVE" || exit 1
 
 echo "[+] Unpacking successful."
 
-echo "[*] Configuring QEMU for $CPU_TARGET..."
-
-CPU_TARGET="$1"
-
 cd qemu-$VERSION || exit 1
 
 echo "[*] Applying patches..."
@@ -135,26 +133,38 @@ patch -p1 <../patches/syscall.diff || exit 1
 
 echo "[+] Patching done."
 
-# --enable-pie seems to give a couple of exec's a second performance
-# improvement, much to my surprise. Not sure how universal this is..
+CPU_TARGETS=$@
 
-CFLAGS="-O3 -ggdb" ./configure --disable-system \
-  --enable-linux-user --disable-gtk --disable-sdl --disable-vnc \
-  --target-list="${CPU_TARGET}-linux-user" --enable-pie --enable-kvm || exit 1
+for CPU_TARGET in $CPU_TARGETS; do
 
-echo "[+] Configuration complete."
+    echo "[*] Configuring QEMU for $CPU_TARGET..."
 
-echo "[*] Attempting to build QEMU (fingers crossed!)..."
+    # --enable-pie seems to give a couple of exec's a second performance
+    # improvement, much to my surprise. Not sure how universal this is..
 
-make || exit 1
+    CFLAGS="-O3 -ggdb" ./configure --disable-system \
+      --enable-linux-user --disable-gtk --disable-sdl --disable-vnc \
+      --target-list="${CPU_TARGET}-linux-user" --enable-pie --enable-kvm || exit 1
 
-echo "[+] Build process successful!"
+    echo "[+] Configuration complete."
 
-echo "[*] Copying binary..."
+    echo "[*] Attempting to build QEMU (fingers crossed!)..."
 
-cp -f "${CPU_TARGET}-linux-user/qemu-${CPU_TARGET}" "../../afl-qemu-trace" || exit 1
+    make || exit 1
+
+    echo "[+] Build process successful!"
+
+    echo "[*] Copying binary..."
+
+    cp -f "${CPU_TARGET}-linux-user/qemu-${CPU_TARGET}" "../../afl-qemu-trace" || exit 1
+
+    mkdir -p ../../tracers/$CPU_TARGET
+
+    cp -f "${CPU_TARGET}-linux-user/qemu-${CPU_TARGET}" "../../tracers/${CPU_TARGET}/afl-qemu-trace" || exit 1
+done
 
 cd ..
+
 ls -l ../afl-qemu-trace || exit 1
 
 echo "[+] Successfully created '../afl-qemu-trace'."
