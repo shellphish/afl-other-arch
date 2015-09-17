@@ -1,15 +1,15 @@
 #!/bin/sh
 
-if [ $# != 1 ]; then
+if [ $# -lt 1 ]; then
     echo "usage: $0 <arch>" >&2
     exit 1
 fi
 
 make
 
-ARCH="$1"
+ARCHES=$@
 
-echo "[*] Preparing to build afl-qemu-trace for $ARCH"
+echo "[*] Preparing to build afl-qemu-trace for $ARCHES"
 
 cd qemu_mode
-./build_qemu_support.sh $ARCH
+./build_qemu_support.sh $ARCHES

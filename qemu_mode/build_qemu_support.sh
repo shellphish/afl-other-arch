@@ -22,10 +22,12 @@
 # will be written to ../afl-qemu-trace.
 #
 
-if [ $# != 1 ]; then
-    echo "usage: $0 <arch>" >&2
+if [ $# -lt 1 ]; then
+    echo "usage: $0 <arches>" >&2
     exit 1
 fi
+
+echo "GOT " $@
 
 QEMU_URL="http://wiki.qemu-project.org/download/qemu-2.3.0.tar.bz2"
 QEMU_SHA384="7a0f0c900f7e2048463cc32ff3e904965ab466c8428847400a0f2dcfe458108a68012c4fddb2a7e7c822b4fd1a49639b"
@@ -129,29 +131,38 @@ patch -p0 <patches/syscall.diff || exit 1
 
 echo "[+] Patching done."
 
-CPU_TARGET="$1"
+CPU_TARGETS=$@
 
-echo "[*] Configuring QEMU for $CPU_TARGET..."
 
 cd qemu-2.3.0 || exit 1
 
-CFLAGS="-O3" ./configure --disable-system --enable-linux-user \
-  --enable-guest-base --disable-gtk --disable-sdl --disable-vnc \
-  --target-list="${CPU_TARGET}-linux-user" || exit 1
+for CPU_TARGET in $CPU_TARGETS; do
 
-echo "[+] Configuration complete."
+    echo "[*] Configuring QEMU for $CPU_TARGET..."
 
-echo "[*] Attempting to build QEMU (fingers crossed!)..."
+    CFLAGS="-O3" ./configure --disable-system --enable-linux-user \
+      --enable-guest-base --disable-gtk --disable-sdl --disable-vnc \
+      --target-list="${CPU_TARGET}-linux-user" || exit 1
 
-make || exit 1
+    echo "[+] Configuration complete."
 
-echo "[+] Build process successful!"
+    echo "[*] Attempting to build QEMU (fingers crossed!)..."
 
-echo "[*] Copying binary..."
+    make || exit 1
 
-cp -f "${CPU_TARGET}-linux-user/qemu-${CPU_TARGET}" "../../afl-qemu-trace" || exit 1
+    echo "[+] Build process successful!"
+
+    echo "[*] Copying binary..."
+
+    cp -f "${CPU_TARGET}-linux-user/qemu-${CPU_TARGET}" "../../afl-qemu-trace" || exit 1
+
+    mkdir -p ../../tracers/$CPU_TARGET
+
+    cp -f "${CPU_TARGET}-linux-user/qemu-${CPU_TARGET}" "../../tracers/${CPU_TARGET}/afl-qemu-trace" || exit 1
+done
 
 cd ..
+
 ls -l ../afl-qemu-trace || exit 1
 
 echo "[+] Successfully created '../afl-qemu-trace'."
