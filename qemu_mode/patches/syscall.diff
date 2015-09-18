@@ -9,7 +9,31 @@
  #ifndef CLONE_IO
  #define CLONE_IO                0x80000000      /* Clone io context */
  #endif
-@@ -11688,8 +11690,21 @@
+@@ -255,6 +257,8 @@
+ #define TARGET_NR__llseek TARGET_NR_llseek
+ #endif
+ 
++static bool last_read_empty = false;
++
+ #ifdef __NR_gettid
+ _syscall0(int, gettid)
+ #else
+@@ -7775,6 +7779,14 @@
+             if (!(p = lock_user(VERIFY_WRITE, arg2, arg3, 0)))
+                 goto efault;
+             ret = get_errno(safe_read(arg1, p, arg3));
++            if (ret == 0) {
++                if (last_read_empty) {
++                    exit_group(1);
++                }
++                last_read_empty = true;
++            } else {
++                last_read_empty = false;
++            }
+             if (ret >= 0 &&
+                 fd_trans_host_to_target_data(arg1)) {
+                 ret = fd_trans_host_to_target_data(arg1)(p, ret);
+@@ -11688,8 +11700,21 @@
          break;
  
      case TARGET_NR_tgkill:
