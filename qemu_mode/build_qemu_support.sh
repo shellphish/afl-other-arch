@@ -148,7 +148,7 @@ for CPU_TARGET in $CPU_TARGETS; do
 
     echo "[*] Attempting to build QEMU (fingers crossed!)..."
 
-    make || exit 1
+    make -j || exit 1
 
     echo "[+] Build process successful!"
 
@@ -171,7 +171,7 @@ echo "[*] Testing the build..."
 
 cd ..
 
-make >/dev/null || exit 1
+make -j >/dev/null || exit 1
 
 #gcc test-instr.c -o test-instr || exit 1
 #
