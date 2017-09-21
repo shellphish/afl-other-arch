@@ -8,7 +8,7 @@ Notes for using ASAN with afl-fuzz
 1) Short version
 ----------------
 
-ASAN on 64-bit systems uses a lot of memory in a way that can't be easily
+ASAN on 64-bit systems requests a lot of memory in a way that can't be easily
 distinguished from a misbehaving program bent on crashing your system.
 
 Because of this, fuzzing with ASAN is recommended only in four scenarios:
@@ -18,7 +18,7 @@ Because of this, fuzzing with ASAN is recommended only in four scenarios:
 
   - On 64-bit systems only if you can do one of the following:
 
-    - Compile the binary in 32-bit mode (gcc -m32 or so),
+    - Compile the binary in 32-bit mode (gcc -m32),
 
     - Precisely gauge memory needs using http://jwilk.net/software/recidivm .
 
@@ -27,12 +27,15 @@ Because of this, fuzzing with ASAN is recommended only in four scenarios:
 
 To compile with ASAN, set AFL_USE_ASAN=1 before calling 'make clean all'. The
 afl-gcc / afl-clang wrappers will pick that up and add the appropriate flags.
+Note that ASAN is incompatible with -static, so be mindful of that.
 
 (You can also use AFL_USE_MSAN=1 to enable MSAN instead.)
 
 There is also the option of generating a corpus using a non-ASAN binary, and
 then feeding it to an ASAN-instrumented one to check for bugs. This is faster,
-and can give you somewhat comparable results.
+and can give you somewhat comparable results. You can also try using
+libdislocator (see libdislocator/README.dislocator in the parent directory) as a
+lightweight and hassle-free (but less thorough) alternative.
 
 2) Long version
 ---------------
@@ -109,3 +112,32 @@ ASAN, MSAN, and other sanitizers appear to be incompatible with QEMU user
 emulation, so please do not try to use them with the -Q option; QEMU doesn't
 seem to appreciate the shadow VM trick used by these tools, and will likely
 just allocate all your physical memory, then crash.
+
+4) ASAN and OOM crashes
+-----------------------
+
+By default, ASAN treats memory allocation failures as fatal errors, immediately
+causing the program to crash. Since this is a departure from normal POSIX
+semantics (and creates the appearance of security issues in otherwise
+properly-behaving programs), we try to disable this by specifying 
+allocator_may_return_null=1 in ASAN_OPTIONS.
+
+Unfortunately, it's been reported that this setting still causes ASAN to
+trigger phantom crashes in situations where the standard allocator would
+simply return NULL. If this is interfering with your fuzzing jobs, you may
+want to cc: yourself on this bug:
+
+  https://bugs.llvm.org/show_bug.cgi?id=22026
+
+5) What about UBSAN?
+--------------------
+
+Some folks expressed interest in fuzzing with UBSAN. This isn't officially
+supported, because many installations of UBSAN don't offer a consistent way
+to abort() on fault conditions or to terminate with a distinctive exit code.
+
+That said, some versions of the library can be binary-patched to address this
+issue, while newer releases support explicit compile-time flags - see this
+mailing list thread for tips:
+
+  https://groups.google.com/forum/#!topic/afl-users/GyeSBJt4M38

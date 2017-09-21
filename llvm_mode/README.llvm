@@ -22,7 +22,9 @@ several interesting properties:
 
   - The instrumentation is CPU-independent. At least in principle, you should
     be able to rely on it to fuzz programs on non-x86 architectures (after
-    building afl-fuzz with AFL_NOX86=1).
+    building afl-fuzz with AFL_NO_X86=1).
+
+  - The instrumentation can cope a bit better with multi-threaded targets.
 
   - Because the feature relies on the internals of LLVM, it is clang-specific
     and will *not* work with GCC.
@@ -61,10 +63,7 @@ operating mode of AFL, e.g.:
   CC=/path/to/afl/afl-clang-fast ./configure [...options...]
   make
 
-...or:
-
-  CXX=/path/to/afl/afl-clang-fast++ ./configure [...options...]
-  make
+Be sure to also include CXX set to afl-clang-fast++ for C++ code.
 
 The tool honors roughly the same environmental variables as afl-gcc (see
 ../docs/env_variables.txt). This includes AFL_INST_RATIO, AFL_USE_ASAN,
@@ -89,51 +88,43 @@ a steady supply of targets to fuzz.
 
 Although this approach eliminates much of the OS-, linker- and libc-level
 costs of executing the program, it does not always help with binaries that
-perform other time-consuming initialization steps before getting to the input
-file.
+perform other time-consuming initialization steps - say, parsing a large config
+file before getting to the fuzzed data.
 
-In such cases, it would be beneficial to initialize the forkserver a bit later,
-once most of the initialization work is already done, but before the binary
-attempts to read the fuzzed input and parse it. You can do this in LLVM mode in
-a fairly simple way:
+In such cases, it's beneficial to initialize the forkserver a bit later, once
+most of the initialization work is already done, but before the binary attempts
+to read the fuzzed input and parse it; in some cases, this can offer a 10x+
+performance gain. You can implement delayed initialization in LLVM mode in a
+fairly simple way.
 
-1. First, locate a suitable location in the code for the deferred initialization
-   to take place. This needs to be done with *extreme* care to avoid breaking
-   the binary. In particular, the program will probably malfunction if the
-   initialization happens after:
+First, find a suitable location in the code where the delayed cloning can 
+take place. This needs to be done with *extreme* care to avoid breaking the
+binary. In particular, the program will probably malfunction if you select
+a location after:
 
-   - The creation of any vital threads or child processes - since the forkserver
-     can't clone them easily.
+  - The creation of any vital threads or child processes - since the forkserver
+    can't clone them easily.
 
-   - The creation of temporary files, network sockets, offset-sensitive file
-     descriptors, and similar shared-state resources - but only provided that
-     their state meaningfully influences the behavior of the program later on.
+  - The initialization of timers via setitimer() or equivalent calls.
 
-   - Any access to the fuzzed input, including reading the metadata about its
-     size.
+  - The creation of temporary files, network sockets, offset-sensitive file
+    descriptors, and similar shared-state resources - but only provided that
+    their state meaningfully influences the behavior of the program later on.
 
-   Of course, things will also not work if the forkserver is never initialized
-   at all and the program is allowed to exit before that; in this case, afl-fuzz
-   will complain about failed handshake and bail out.
+  - Any access to the fuzzed input, including reading the metadata about its
+    size.
 
-2. Next, insert the following global function declaration somewhere in the
-   source file:
+With the location selected, add this code in the appropriate spot:
 
-   void __afl_manual_init(void);
+#ifdef __AFL_HAVE_MANUAL_CONTROL
+  __AFL_INIT();
+#endif
 
-   ...and add a call to this function in the desired location before recompiling
-   the project with afl-clang-fast (afl-gcc and afl-clang will *not* work). You
-   can put this in between #ifdef __AFL_HAVE_MANUAL_INIT to allow the code to
-   build correctly without afl-clang-fast.
+You don't need the #ifdef guards, but including them ensures that the program
+will keep working normally when compiled with a tool other than afl-clang-fast.
 
-3. Finally, be sure to set AFL_DEFER_FORKSRV=1 before invoking afl-fuzz.
-
-Again, this feature is easy to misuse; be careful and double-test that the
-coverage and the number of discovered paths is comparable between normal and
-deferred runs. That said, when you do it well, you can see gains up to 10x or
-so:
-
-  https://groups.google.com/forum/#!topic/afl-users/fNMJHl7Fhzs
+Finally, recompile the program with afl-clang-fast (afl-gcc or afl-clang will
+*not* generate a deferred-initialization binary) - and you should be all set!
 
 5) Bonus feature #2: persistent mode
 ------------------------------------
@@ -141,30 +132,59 @@ so:
 Some libraries provide APIs that are stateless, or whose state can be reset in
 between processing different input files. When such a reset is performed, a
 single long-lived process can be reused to try out multiple test cases,
-eliminating the need for repeated fork() calls and the associated OS overhead:
+eliminating the need for repeated fork() calls and the associated OS overhead.
 
-  http://lcamtuf.blogspot.com/2015/06/new-in-afl-persistent-mode.html
+The basic structure of the program that does this would be:
 
-With certain fast targets, such an approach can offer dramatic (5x+)
-performance gains. The LLVM mode allows you to build such persistent targets
-using the template provided in ../experimental/persistent_demo/.
+  while (__AFL_LOOP(1000)) {
 
-To leverage this functionality, you need to set AFL_PERSISTENT before
-invoking afl-fuzz, and the target binary needs to incorporate a simple pattern
-documented in the aforementioned example file. It also needs to be compiled with
-afl-clang-fast; other compiler wrappers will not work.
+    /* Read input data. */
+    /* Call library code to be fuzzed. */
+    /* Reset state. */
+
+  }
+
+  /* Exit normally */
+
+The numerical value specified within the loop controls the maximum number
+of iterations before AFL will restart the process from scratch. This minimizes
+the impact of memory leaks and similar glitches; 1000 is a good starting point,
+and going much higher increases the likelihood of hiccups without giving you
+any real performance benefits.
+
+A more detailed template is shown in ../experimental/persistent_demo/.
+Similarly to the previous mode, the feature works only with afl-clang-fast;
+#ifdef guards can be used to suppress it when using other compilers.
 
 Note that as with the previous mode, the feature is easy to misuse; if you
-do not reset the critical state fully, you may end up with false positives or
+do not fully reset the critical state, you may end up with false positives or
 waste a whole lot of CPU power doing nothing useful at all. Be particularly
-wary of memory leaks.
-
-When running in this mode, the execution paths will inherently vary a bit
-depending on whether the input loop is being entered for the first time or
-executed again. To avoid spurious warnings, AFL_PERSISTENT implies
-AFL_NO_VAR_CHECK and hides the "variable path" warnings in the UI.
+wary of memory leaks and of the state of file descriptors.
 
 PS. Because there are task switches still involved, the mode isn't as fast as
 "pure" in-process fuzzing offered, say, by LLVM's LibFuzzer; but it is a lot
 faster than the normal fork() model, and compared to in-process fuzzing,
 should be a lot more robust.
+
+6) Bonus feature #3: new 'trace-pc-guard' mode
+----------------------------------------------
+
+Recent versions of LLVM are shipping with a built-in execution tracing feature
+that provides AFL with the necessary tracing data without the need to
+post-process the assembly or install any compiler plugins. See:
+
+  http://clang.llvm.org/docs/SanitizerCoverage.html#tracing-pcs-with-guards
+
+As of this writing, the feature is only available on SVN trunk, and is yet to
+make it to an official release of LLVM. Nevertheless, if you have a
+sufficiently recent compiler and want to give it a try, build afl-clang-fast
+this way:
+
+  AFL_TRACE_PC=1 make clean all
+
+Note that this mode is currently about 20% slower than "vanilla" afl-clang-fast,
+and about 5-10% slower than afl-clang. This is likely because the
+instrumentation is not inlined, and instead involves a function call. On systems
+that support it, compiling your target with -flto should help.
+
+

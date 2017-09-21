@@ -44,7 +44,7 @@ typedef uint32_t u32;
 typedef unsigned long long u64;
 #else
 typedef uint64_t u64;
-#endif /* ^sizeof(...) */
+#endif /* ^__x86_64__ */
 
 typedef int8_t   s8;
 typedef int16_t  s16;
@@ -68,12 +68,19 @@ typedef int64_t  s64;
           ((_ret >> 8) & 0x0000FF00)); \
   })
 
-#define R(x) (random() % (x))
+#ifdef AFL_LLVM_PASS
+#  define AFL_R(x) (random() % (x))
+#else
+#  define R(x) (random() % (x))
+#endif /* ^AFL_LLVM_PASS */
 
 #define STRINGIFY_INTERNAL(x) #x
 #define STRINGIFY(x) STRINGIFY_INTERNAL(x)
 
 #define MEM_BARRIER() \
   asm volatile("" ::: "memory")
+
+#define likely(_x)   __builtin_expect(!!(_x), 1)
+#define unlikely(_x)  __builtin_expect(!!(_x), 0)
 
 #endif /* ! _HAVE_TYPES_H */

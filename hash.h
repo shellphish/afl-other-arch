@@ -10,7 +10,17 @@
    similar to the original; the 64-bit one is a custom hack with
    mostly-unproven properties.
 
-   Austin's original code is public domain; so is this variant.
+   Austin's original code is public domain.
+
+   Other code written and maintained by Michal Zalewski <lcamtuf@google.com>
+
+   Copyright 2016 Google Inc. All rights reserved.
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at:
+
+     http://www.apache.org/licenses/LICENSE-2.0
 
  */
 
