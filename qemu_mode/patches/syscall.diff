@@ -1,6 +1,15 @@
---- qemu-2.3.0/linux-user/syscall.c.orig	2015-04-27 07:08:26.000000000 -0700
-+++ qemu-2.3.0/linux-user/syscall.c	2015-09-17 21:29:11.174576976 -0700
-@@ -204,6 +204,8 @@
+--- qemu-2.10.0-rc3-clean/linux-user/syscall.c	2017-08-15 11:39:41.000000000 -0700
++++ qemu-2.10.0-rc3/linux-user/syscall.c	2017-08-22 14:34:03.193088186 -0700
+@@ -116,6 +116,8 @@
+ 
+ #include "qemu.h"
+ 
++extern unsigned int afl_forksrv_pid;
++
+ #ifndef CLONE_IO
+ #define CLONE_IO                0x80000000      /* Clone io context */
+ #endif
+@@ -255,6 +257,8 @@
  #define TARGET_NR__llseek TARGET_NR_llseek
  #endif
  
@@ -9,33 +18,10 @@
  #ifdef __NR_gettid
  _syscall0(int, gettid)
  #else
-@@ -227,7 +229,21 @@
- _syscall3(int,sys_rt_sigqueueinfo,int,pid,int,sig,siginfo_t *,uinfo)
- _syscall3(int,sys_syslog,int,type,char*,bufp,int,len)
- #if defined(TARGET_NR_tgkill) && defined(__NR_tgkill)
--_syscall3(int,sys_tgkill,int,tgid,int,pid,int,sig)
-+
-+extern unsigned int afl_forksrv_pid;
-+
-+static int sys_tgkill(int tgid, int pid, int sig) {
-+
-+  /* Workaround for -lpthread to make abort() work properly, without
-+     killing the forkserver due to a prematurely cached PID. */
-+
-+  if (afl_forksrv_pid && afl_forksrv_pid == pid && sig == SIGABRT)
-+    pid = tgid = getpid();
-+
-+  return syscall(__NR_sys_tgkill, pid, tgid, sig);
-+
-+}
-+
- #endif
- #if defined(TARGET_NR_tkill) && defined(__NR_tkill)
- _syscall2(int,sys_tkill,int,tid,int,sig)
-@@ -5572,6 +5588,14 @@
+@@ -7775,6 +7779,14 @@
              if (!(p = lock_user(VERIFY_WRITE, arg2, arg3, 0)))
                  goto efault;
-             ret = get_errno(read(arg1, p, arg3));
+             ret = get_errno(safe_read(arg1, p, arg3));
 +            if (ret == 0) {
 +                if (last_read_empty) {
 +                    exit_group(1);
@@ -44,6 +30,30 @@
 +            } else {
 +                last_read_empty = false;
 +            }
-             unlock_user(p, arg2, ret);
-         }
+             if (ret >= 0 &&
+                 fd_trans_host_to_target_data(arg1)) {
+                 ret = fd_trans_host_to_target_data(arg1)(p, ret);
+@@ -11688,8 +11700,21 @@
          break;
+ 
+     case TARGET_NR_tgkill:
+-        ret = get_errno(safe_tgkill((int)arg1, (int)arg2,
+-                        target_to_host_signal(arg3)));
++
++        {
++          int pid  = (int)arg1,
++              tgid = (int)arg2,
++              sig  = (int)arg3;
++
++          /* Not entirely sure if the below is correct for all architectures. */
++
++          if(afl_forksrv_pid && afl_forksrv_pid == pid && sig == SIGABRT)
++              pid = tgid = getpid();
++
++          ret = get_errno(safe_tgkill(pid, tgid, target_to_host_signal(sig)));
++
++        }
++
+         break;
+ 
+ #ifdef TARGET_NR_set_robust_list
