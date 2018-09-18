@@ -140,7 +140,7 @@ for CPU_TARGET in $CPU_TARGETS; do
     # --enable-pie seems to give a couple of exec's a second performance
     # improvement, much to my surprise. Not sure how universal this is..
 
-    CFLAGS="-O3 -ggdb" ./configure --disable-system \
+    CFLAGS="-O3 -ggdb" ./configure --disable-system --python=`which python2` \
       --enable-linux-user --disable-gtk --disable-sdl --disable-vnc \
       --target-list="${CPU_TARGET}-linux-user" --enable-pie --enable-kvm || exit 1
 
